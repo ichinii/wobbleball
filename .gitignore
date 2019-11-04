@@ -1,0 +1,6 @@
+/.git/
+/.bam/
+/build/
+/obj/
+local/
+/bin_*
