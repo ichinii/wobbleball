@@ -26,13 +26,7 @@ auto& operator << (std::basic_ostream<CharT, Traits>& os, std::chrono::duration<
 	return os << duration.count();
 }
 
-constexpr auto size = glm::uvec3(1, 1, 1) * 16u;
-constexpr auto length = size.x * size.y * size.z;
-using cube_t = unsigned char;
-using cubes_t = cube_t[length];
 constexpr auto speed = 1.f;
-using ortho_camera_t = struct { glm::vec3 pos, dir; };
-// using persp_camera_t = struct { glm::vec3 pos, dir; float fov; };
 
 int main()
 {
@@ -111,12 +105,24 @@ int main()
 
 		glm::dvec2 mouse;
 		glfwGetCursorPos(window, &mouse.x, &mouse.y);
+		mouse.y = window_size.y - mouse.y + 1;
+
+		float x = (mouse.x - window_size.x * .5f) / window_size.y;
+		float y = (mouse.y - window_size.y * .5f) / window_size.y;
+		x *= glm::pi<float>();
+		y *= glm::pi<float>();
+		glm::mat4 view = glm::lookAt(glm::vec3{
+			cos(y) * sin(x),
+			sin(y),
+			cos(y) * cos(x)
+		}, {0, 0, 0}, {0, 1, 0});
 
 		{ // launch compute shaders and draw to image
 			glUseProgram(compute_program);
 			glUniform1f(glGetUniformLocation(compute_program, "elapsed_time"), elapsed_time.count() / 1000.f);
 			glUniform1f(glGetUniformLocation(compute_program, "delta_time"), delta_time.count() / 1000.f);
 			glUniform2i(glGetUniformLocation(compute_program, "mouse_coord"), mouse.x, mouse.y);
+			glUniformMatrix4fv(glGetUniformLocation(compute_program, "view"), 1, GL_FALSE, &view[0][0]);
 			glDispatchCompute(frame_tex_size.x / 16 + 1, frame_tex_size.y / 16 + 1, 1);
 		}
 
