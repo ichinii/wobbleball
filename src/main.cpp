@@ -8,23 +8,10 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include "shader.hpp"
+#include "simulate.hpp"
+#include "misc.hpp"
 
 using namespace std::chrono_literals;
-
-template <typename CharT, typename Traits, glm::length_t L, typename T, glm::qualifier Q>
-auto& operator << (std::basic_ostream<CharT, Traits>& os, glm::vec<L, T, Q>& vec)
-{
-	if (L == 0) return os << "()";
-	os << '(' << vec[0];
-	for (glm::length_t i = 1; i < L; ++i) os << '|' << vec[i];
-	return os << ')';
-}
-
-template <typename CharT, typename Traits, typename Rep, typename Period>
-auto& operator << (std::basic_ostream<CharT, Traits>& os, std::chrono::duration<Rep, Period> duration)
-{
-	return os << duration.count();
-}
 
 constexpr auto speed = 1.f;
 
@@ -84,16 +71,24 @@ int main()
 	glBindVertexArray(0);
 	glUseProgram(0);
 
+	Simulate simulate;
+
 	using clock = std::chrono::steady_clock;
 	auto start_time = clock::now();
 	auto elapsed_time = 0ms;
 	auto fps_print_time = elapsed_time;
+	float timescale = 2.f;
 
 	auto frames = 0ul;
 	while (!glfwWindowShouldClose(window)) {
 		auto cur_time = clock::now();
 		auto delta_time = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - (start_time + elapsed_time));
 		elapsed_time += delta_time;
+
+		auto elapsed_time_ms = elapsed_time;
+		auto delta_time_ms = delta_time;
+		elapsed_time_ms *= timescale;
+		delta_time_ms *= timescale;
 
 		glfwPollEvents();
 		glfwGetWindowSize(window, &window_size.x, &window_size.y);
@@ -103,6 +98,8 @@ int main()
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, frame_tex_size.x, frame_tex_size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
 		glBindImageTexture(0, frame_tex_out, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
+		simulate.update(elapsed_time_ms, delta_time_ms);
+
 		glm::dvec2 mouse;
 		glfwGetCursorPos(window, &mouse.x, &mouse.y);
 		mouse.y = window_size.y - mouse.y + 1;
@@ -111,18 +108,21 @@ int main()
 		float y = (mouse.y - window_size.y * .5f) / window_size.y;
 		x *= glm::pi<float>();
 		y *= glm::pi<float>();
-		glm::mat4 view = glm::lookAt(glm::vec3{
+		glm::mat4 view = glm::lookAt(7.f * glm::vec3{
 			cos(y) * sin(x),
 			sin(y),
 			cos(y) * cos(x)
-		}, {0, 0, 0}, {0, 1, 0});
+		}, {0, -2, 0}, {0, 1, 0});
 
 		{ // launch compute shaders and draw to image
 			glUseProgram(compute_program);
-			glUniform1f(glGetUniformLocation(compute_program, "elapsed_time"), elapsed_time.count() / 1000.f);
-			glUniform1f(glGetUniformLocation(compute_program, "delta_time"), delta_time.count() / 1000.f);
+			glUniform1f(glGetUniformLocation(compute_program, "elapsed_time"), elapsed_time_ms.count() / 1000.f);
+			glUniform1f(glGetUniformLocation(compute_program, "delta_time"), delta_time_ms.count() / 1000.f);
 			glUniform2i(glGetUniformLocation(compute_program, "mouse_coord"), mouse.x, mouse.y);
 			glUniformMatrix4fv(glGetUniformLocation(compute_program, "view"), 1, GL_FALSE, &view[0][0]);
+			auto players_size = std::min(16ul, simulate.ps.size());
+			glUniform1i(glGetUniformLocation(compute_program, "players_size"), players_size);
+			glUniform3fv(glGetUniformLocation(compute_program, "players_pos"), players_size, reinterpret_cast<float*>(&simulate.ps[0]));
 			glDispatchCompute(frame_tex_size.x / 16 + 1, frame_tex_size.y / 16 + 1, 1);
 		}
 
@@ -142,7 +142,7 @@ int main()
 		}
 
 		++frames;
-		if (fps_print_time.count() + 1000 < elapsed_time.count()) {
+		if (fps_print_time.count() + 1000 * timescale < elapsed_time.count()) {
 			fps_print_time += elapsed_time - fps_print_time;
 			std::cout << frames << " fps" << std::endl;
 			frames = 0;

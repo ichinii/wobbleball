@@ -8,6 +8,9 @@ uniform float delta_time;
 uniform ivec2 mouse_coord;
 uniform mat4 view;
 
+uniform int players_size;
+uniform vec3 players_pos[16];
+
 mat2 rot(float a)
 {
 	float s = sin(a);
@@ -21,6 +24,11 @@ float smin(float a, float b, float k)
 	return mix(b, a, h) - k * h * (1. - h);
 }
 
+float smax(float a, float b, float k)
+{
+	return -smin(-a, -b, k);
+}
+
 float plane(vec3 p, vec3 n)
 {
 	return dot(p, n);
@@ -31,16 +39,16 @@ float sphere(vec3 p)
 	return length(p);
 }
 
-float cube(vec3 p)
+float cube(vec3 p, float r)
 {
 	p = abs(p);
-	return max(p.x, max(p.y, p.z));
+	return length(p - min(p, r));
 }
 
-float roundcube(vec3 p)
+float roundcube(vec3 p, vec2 r)
 {
-	p = abs(p);
-	return -smin(-p.x, smin(-p.y, -p.z, .2), .2);
+	float c = cube(p, r.x - r.y);
+	return c - r.y;
 }
 
 float capsule(vec3 p, vec3 a, vec3 b)
@@ -56,10 +64,10 @@ float capsule(vec3 p, vec3 a, vec3 b)
 	return length(p - c);
 }
 
-float torus(vec3 p, float r)
+float torus(vec3 p, vec2 r)
 {
-	float l = length(p.xz) - r;
-	return length(vec2(l, p.y));
+	float l = length(p.xz) - r.x;
+	return length(vec2(l, p.y)) - r.y;
 }
 
 float cylinder(vec3 p, vec3 a, vec3 b, float r)
@@ -79,17 +87,24 @@ float cylinder(vec3 p, vec3 a, vec3 b, float r)
 
 float scene(vec3 p)
 {
-	float s0 = cube(p) - .03;
-	float p0 = plane(p - vec3(0, -1, 0), vec3(0, 1, 0));
+	float p0 = plane(
+		p - vec3(0, sin(p.x + elapsed_time) * .5 + sin(p.z * .5 + elapsed_time * .3) * .5, 0),
+		normalize(vec3(sin(elapsed_time * .35) * .1, 1, sin(elapsed_time) * .1)));
+	float s1 = sphere(p - vec3(0, 0, 0));
+	float ground = smax(p0, -s1, 10.);
 
-	float ca0 = capsule(p, vec3(-1, -1, -2), vec3(1, 1, -2)) - .3;
-	float ca1 = capsule(p, vec3(-1, 1, -2), vec3(1, -1, -2)) - .3;
-	float x = smin(ca0, ca1, .1);
+	float c0 = roundcube(p - vec3(0, -2., 0), vec2(1., .2));
+	ground = smin(ground, c0, 2.);
 
-	float t0 = torus(p - vec3(.3, -.5, .3), .3) - .1;
-	float cy0 = cylinder(p, vec3(-1, -.2, -.2), vec3(-1, .2, .2), .5);
+	float t0 = torus(p - vec3(0, -1, 0), vec2(5., 1.3));
+	ground = smin(ground, t0, 1.);
 
-	return min(min(s0, -smin(-p0, x - .2, .05)), min(min(x, t0), cy0));
+	float players = 100.;
+	for (int i = 0; i < min(16, players_size); ++i) {
+		players = min(players, sphere(p - players_pos[i]));
+	}
+
+	return min(players - .2, ground);
 }
 
 bool march(vec3 ro, vec3 rd, out vec3 p, out float n)
@@ -97,7 +112,7 @@ bool march(vec3 ro, vec3 rd, out vec3 p, out float n)
 	p = ro;
 	float lo = 0.;
 
-	for (int i = 0; i < 64; ++i) {
+	for (int i = 0; i < 64*10; ++i) {
 		float l = scene(p);
 
 		p += l * rd;
@@ -140,7 +155,6 @@ void main() {
 
 	vec3 ro = (inverse(view) * vec4(0, 0, 0, 1)).xyz;
 	vec3 rd = (inverse(view) * vec4(normalize(vec3(uv.xy, -1)), 0)).xyz;
-	/* vec3 rd = normalize(vec3(uv.xy, 1)); */
 
 	float n;
 	if (march(ro, rd, ro, n)) {
