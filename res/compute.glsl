@@ -11,6 +11,8 @@ uniform mat4 view;
 uniform int players_size;
 uniform vec3 players_pos[16];
 
+#define light_pos vec3(8, 8, 8)
+
 mat2 rot(float a)
 {
 	float s = sin(a);
@@ -99,6 +101,10 @@ float scene(vec3 p)
 	float t0 = torus(p - vec3(0, -1, 0), vec2(5., 1.3));
 	ground = smin(ground, t0, 1.);
 
+	float s2 = sphere(p - vec3(0, 1, 0)) - 7.5;
+	float p1 = plane(p - vec3(0, 2, 0), vec3(0, -1, 0));
+	ground = smin(ground, max(-s2, -p1), 2.);
+
 	float players = 100.;
 	for (int i = 0; i < min(16, players_size); ++i) {
 		players = min(players, sphere(p - players_pos[i]));
@@ -107,7 +113,7 @@ float scene(vec3 p)
 	return min(players - .2, ground);
 }
 
-bool march(vec3 ro, vec3 rd, out vec3 p, out float n)
+bool march(vec3 ro, vec3 rd, out vec3 p, out float it)
 {
 	p = ro;
 	float lo = 0.;
@@ -117,7 +123,7 @@ bool march(vec3 ro, vec3 rd, out vec3 p, out float n)
 
 		p += l * rd;
 		if (l < .001) {
-			n = i / 64.;
+			it = i / 64.;
 			return true;
 		}
 
@@ -156,11 +162,22 @@ void main() {
 	vec3 ro = (inverse(view) * vec4(0, 0, 0, 1)).xyz;
 	vec3 rd = (inverse(view) * vec4(normalize(vec3(uv.xy, -1)), 0)).xyz;
 
-	float n;
-	if (march(ro, rd, ro, n)) {
-		c.r += smoothstep(1., 0., n);
-		c.b += max(0., dot(normal(ro), -rd));
+	float it;
+	vec3 p;
+	if (march(ro, rd, p, it)) {
+		vec3 n = normal(p);
+		c.r += smoothstep(1., 0., it);
+		c.b += max(0., dot(n, -rd));
+		
+		vec3 ld = normalize(light_pos - p);
+		float cosa = dot(n, ld);
+		/* c *= max(.2, cosa); */
+
+		ro = p + n * .005;
+		rd = ld;
+		if (march(ro, rd, p, it) && length(p - ro) < length(light_pos - ro))
+			c *= .4;
 	}
 
-	imageStore(output_image, ivec2(output_coord), vec4(c, 1));
+	imageStore(output_image, ivec2(output_coord), vec4(pow(c, vec3(.45)), 1));
 }

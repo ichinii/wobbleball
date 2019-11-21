@@ -2,6 +2,8 @@
 #include "simulate.hpp"
 #include "misc.hpp"
 #include <optional>
+#include <glm/gtx/rotate_vector.hpp>
+#include "keyboard.hpp"
 
 using namespace glm;
 
@@ -47,6 +49,7 @@ float torus(vec3 p, vec2 r)
 float scene(glm::vec3 p, float elapsed_time = 0.f, float r = 0.f)
 {
 	using glm::min;
+	using glm::max;
 
 	float p0 = plane(
 		p - vec3(0, sin(p.x + elapsed_time) * .5 + sin(p.z * .5 + elapsed_time * .3) * .5, 0),
@@ -59,6 +62,10 @@ float scene(glm::vec3 p, float elapsed_time = 0.f, float r = 0.f)
 
 	float t0 = torus(p - vec3(0, -1, 0), vec2(5., 1.3));
 	ground = smin(ground, t0, 1.);
+
+	float s2 = sphere(p - vec3(0, 1, 0)) - 7.5;
+	float p1 = plane(p - vec3(0, 2, 0), vec3(0, -1, 0));
+	ground = smin(ground, max(-s2, -p1), 2.);
 
 	return ground;
 }
@@ -118,30 +125,44 @@ void Simulate::update(std::chrono::milliseconds elapsed_time, std::chrono::milli
 	float elapsed = elapsed_time.count() / 1000.f;
 	assert(ps.size() == vs.size());
 	delta_time = delta_time / 2;
+	float r = .2f;
 
 	for (auto i = 0ul; i < ps.size(); ++i) {
 		auto& vel = vs[i];
 		auto& pos = ps[i];
 
-		// vel += glm::vec3(0, -1, 0) * (delta_time.count() / 1000.f);
-		vel = glm::normalize(glm::mix(vel, glm::vec3(0, -1, 0), .05f));
+		vel += glm::vec3(0, -1, 0) * (delta_time.count() / 1000.f);
 		pos += vel * (delta_time.count() / 1000.f);
 
-		auto opos = intersectSphereScene(pos, .2f, elapsed);
+		if (auto opos = intersectSphereScene(pos, r, elapsed); opos) {
+			auto apos = *opos; // absolute collision pos
+			auto lpos = apos - pos + glm::vec3(0, .001f, 0);	// local collision pos
+			auto lposl = glm::length(lpos);
+			auto lposd = glm::normalize(lpos);
+			auto n = normal(apos + lposd * .01f); // normal of the scene
 
-		// std::cout << pos << " " << l << " " << n << std::endl;
+			// adjust position
+			pos += lposd * (lposl - r);
 
-		if (opos) {
-			auto ipos = *opos;
-			float b = glm::sign(scene(ipos, elapsed));
-			glm::vec3 n = -b * normal(ipos, elapsed);
-			
-			auto nvel = glm::normalize(vel);
-			float cosa = glm::dot(n, nvel);
-			auto rvel = glm::mix(vel, glm::reflect(nvel, n), cosa * -.5 + .5);
-			vel = glm::normalize(rvel) * glm::length(vel);
-			// vel += n * .1f;
-			pos += n * (.2f - glm::length(pos - ipos));
+			// moving towards collision point
+			if (glm::dot(vel, n) < 0.f) {
+
+				// bounce
+				auto bounce = glm::reflect(vel, n);
+
+				// hook
+				auto a = s_keyboard[GLFW_KEY_A] ? .0f : .99f;
+				auto o = glm::normalize(glm::cross(-n, vel));
+				auto hook = glm::length(vel)
+					* (a + (1.f - a) * glm::max(0.f, glm::dot(-n, glm::normalize(vel))))
+					* glm::rotate(n, glm::pi<float>() * .5f, -o);
+
+				vel = s_keyboard[GLFW_KEY_E] ? bounce : hook;
+			}
+
+			// jump
+			if (s_keyboard[GLFW_KEY_W])
+				vel += n;
 		}
 	}
 }

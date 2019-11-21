@@ -52,7 +52,7 @@ static GLuint loadShaderFromFile(GLenum type, const char* filepath)
 
 	GLuint shaderId = loadShaderFromSourceCode(type, line.c_str(), line.length());
 	if (!shaderId)
-		std::cout << "...with filepath '" << filepath << "'"; 
+		std::cout << "...with filepath '" << filepath << "'" << std::endl; 
 
 	return shaderId;
 }

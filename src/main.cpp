@@ -10,10 +10,10 @@
 #include "shader.hpp"
 #include "simulate.hpp"
 #include "misc.hpp"
+#include "keyboard.hpp"
+#include "watcher.hpp"
 
 using namespace std::chrono_literals;
-
-constexpr auto speed = 1.f;
 
 int main()
 {
@@ -24,11 +24,9 @@ int main()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 	auto window_size = glm::ivec2{1280, 720};
 	auto window = glfwCreateWindow(window_size.x, window_size.y, "glsl", nullptr, nullptr);
-	glfwSetKeyCallback(window, [] (GLFWwindow* window, int key, [[maybe_unused]] int scancode, [[maybe_unused]] int action, int mods) {
-		if (!mods && key == GLFW_KEY_Q) glfwSetWindowShouldClose(window, true);
-	});
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(0);
+	keyboardInit(window);
 
 	if (glewInit() != GLEW_OK) return 0;
 	glClearColor(.2, .1, 0, 1);
@@ -36,6 +34,12 @@ int main()
 	// std::this_thread::sleep_for(1s);
 	auto display_program = createProgram({{GL_VERTEX_SHADER, "res/vertex.glsl"}, {GL_FRAGMENT_SHADER, "res/fragment.glsl"}});
 	auto compute_program = createProgram({{GL_COMPUTE_SHADER, "res/compute.glsl"}});
+
+	auto compute_shader_watcher = Watcher("res/compute.glsl", [&] () {
+		if (compute_program > 0)
+			glDeleteProgram(compute_program);
+		compute_program = createProgram({{GL_COMPUTE_SHADER, "res/compute.glsl"}});
+	});
 
 	glUseProgram(compute_program);
 
@@ -85,6 +89,8 @@ int main()
 		auto delta_time = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - (start_time + elapsed_time));
 		elapsed_time += delta_time;
 
+		compute_shader_watcher.update();
+
 		auto elapsed_time_ms = elapsed_time;
 		auto delta_time_ms = delta_time;
 		elapsed_time_ms *= timescale;
@@ -108,11 +114,12 @@ int main()
 		float y = (mouse.y - window_size.y * .5f) / window_size.y;
 		x *= glm::pi<float>();
 		y *= glm::pi<float>();
-		glm::mat4 view = glm::lookAt(7.f * glm::vec3{
+		auto camera_center_pos = glm::vec3(3, 3, 3);
+		glm::mat4 view = glm::lookAt(camera_center_pos + 5.f * glm::vec3{
 			cos(y) * sin(x),
 			sin(y),
 			cos(y) * cos(x)
-		}, {0, -2, 0}, {0, 1, 0});
+		}, camera_center_pos, {0, 1, 0});
 
 		{ // launch compute shaders and draw to image
 			glUseProgram(compute_program);
@@ -147,6 +154,8 @@ int main()
 			std::cout << frames << " fps" << std::endl;
 			frames = 0;
 		}
+
+		glfwSetWindowShouldClose(window, s_keyboard[GLFW_KEY_Q]);
 	}
 
 	glfwTerminate();
