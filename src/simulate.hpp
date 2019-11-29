@@ -10,5 +10,6 @@ public:
 	void update(std::chrono::milliseconds, std::chrono::milliseconds);
 
 	std::vector<glm::vec3> ps;
-	std::vector<glm::vec3> vs;
+	std::vector<glm::vec3> ms;
+	std::vector<float> ws;
 };

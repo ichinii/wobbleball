@@ -81,7 +81,7 @@ int main()
 	auto start_time = clock::now();
 	auto elapsed_time = 0ms;
 	auto fps_print_time = elapsed_time;
-	float timescale = 2.f;
+	float timescale = 1.f;
 
 	auto frames = 0ul;
 	while (!glfwWindowShouldClose(window)) {

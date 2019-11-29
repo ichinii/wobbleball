@@ -87,18 +87,19 @@ glm::vec3 normal(glm::vec3 p, float elapsed = 0.f)
 
 Simulate::Simulate()
 {
-	// for (int i = 0; i < 4; ++i) {
+	// for (int i = 0; i < 16; ++i) {
 	// 	ps.push_back(glm::vec3(((std::rand() % 100) / 50.f - 1.f) * 3.f, 0.f, ((std::rand() % 100) / 50.f - 1.f) * 3.f));
 	// 	vs.push_back(glm::vec3(0, -1.f, 0));
 	// }
 
 	ps.push_back(glm::vec3(-3, 0, 0));
-	vs.push_back(glm::vec3(0, -1, 0));
+	ms.push_back(glm::vec3(0, 1, 0));
+	ws.push_back(1.f);
 }
 
 std::optional<glm::vec3> intersectSphereScene(glm::vec3 pos, float r, float elapsed = 0.f)
 {
-	const int sr = 16;
+	const int sr = 8;
 	float lmin = r;
 	glm::vec3 pmin;
 	for (int x = -sr; x < sr + 1; ++x) {
@@ -122,17 +123,22 @@ std::optional<glm::vec3> intersectSphereScene(glm::vec3 pos, float r, float elap
 
 void Simulate::update(std::chrono::milliseconds elapsed_time, std::chrono::milliseconds delta_time)
 {
+	const float speed = 1.f;
 	float elapsed = elapsed_time.count() / 1000.f;
-	assert(ps.size() == vs.size());
+	assert(ps.size() == ms.size() && ps.size() == ws.size());
 	delta_time = delta_time / 2;
 	float r = .2f;
 
 	for (auto i = 0ul; i < ps.size(); ++i) {
-		auto& vel = vs[i];
 		auto& pos = ps[i];
+		auto& mom = ms[i];
+		auto& weight = ws[i];
+		weight += (s_keyboard[GLFW_KEY_S] ? (weight * 3.f) : (1.f - weight) * 10.f) * (delta_time.count() / 1000.f);
+		weight = glm::min(weight, 10.f);
+		std::cout << weight << std::endl;
 
-		vel += glm::vec3(0, -1, 0) * (delta_time.count() / 1000.f);
-		pos += vel * (delta_time.count() / 1000.f);
+		mom += glm::vec3(0, -weight, 0) * (delta_time.count() / 1000.f * speed);
+		pos += (mom / weight) * (delta_time.count() / 1000.f * speed);
 
 		if (auto opos = intersectSphereScene(pos, r, elapsed); opos) {
 			auto apos = *opos; // absolute collision pos
@@ -140,29 +146,23 @@ void Simulate::update(std::chrono::milliseconds elapsed_time, std::chrono::milli
 			auto lposl = glm::length(lpos);
 			auto lposd = glm::normalize(lpos);
 			auto n = normal(apos + lposd * .01f); // normal of the scene
+			auto cosa = glm::dot(mom, n);
 
 			// adjust position
 			pos += lposd * (lposl - r);
 
 			// moving towards collision point
-			if (glm::dot(vel, n) < 0.f) {
+			if (cosa < 0.f) {
 
 				// bounce
-				auto bounce = glm::reflect(vel, n);
+				auto bounce = glm::reflect(mom, n);
 
-				// hook
-				auto a = s_keyboard[GLFW_KEY_A] ? .0f : .99f;
-				auto o = glm::normalize(glm::cross(-n, vel));
-				auto hook = glm::length(vel)
-					* (a + (1.f - a) * glm::max(0.f, glm::dot(-n, glm::normalize(vel))))
-					* glm::rotate(n, glm::pi<float>() * .5f, -o);
-
-				vel = s_keyboard[GLFW_KEY_E] ? bounce : hook;
+				mom = glm::mix(mom - cosa * n, bounce, s_keyboard[GLFW_KEY_E] ? 1. : .5);
 			}
 
 			// jump
 			if (s_keyboard[GLFW_KEY_W])
-				vel += n;
+				mom += n * weight;
 		}
 	}
 }

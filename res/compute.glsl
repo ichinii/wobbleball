@@ -11,7 +11,7 @@ uniform mat4 view;
 uniform int players_size;
 uniform vec3 players_pos[16];
 
-#define light_pos vec3(8, 8, 8)
+#define light_pos vec3(8, 8, -8)
 
 mat2 rot(float a)
 {
@@ -166,8 +166,9 @@ void main() {
 	vec3 p;
 	if (march(ro, rd, p, it)) {
 		vec3 n = normal(p);
-		c.r += smoothstep(1., 0., it);
-		c.b += max(0., dot(n, -rd));
+		c.g += .3 * smoothstep(1., 0., it);
+		c.b += .9 * max(0., dot(n, -rd));
+		c.r += (c.g + c.b) * .2;
 		
 		vec3 ld = normalize(light_pos - p);
 		float cosa = dot(n, ld);
@@ -176,7 +177,7 @@ void main() {
 		ro = p + n * .005;
 		rd = ld;
 		if (march(ro, rd, p, it) && length(p - ro) < length(light_pos - ro))
-			c *= .4;
+			c *= .1;
 	}
 
 	imageStore(output_image, ivec2(output_coord), vec4(pow(c, vec3(.45)), 1));
